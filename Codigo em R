@@ -1,0 +1,170 @@
+#Pacotes necessarios para utilização do código:
+library(extRemes)
+library(POT)
+library(Kendall)
+library(lawstat)
+library(trend)
+library(evd)
+require(trend)
+library(evdbayes)
+library("coda")
+
+#Dados de precipitação de Poços de caldas:
+Ano<-c(1989,1990,1991,1992,1993,1994,1995,1996,1997,1998,1999,2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2012,2013,2014,2015) #Anos relativos ás precipitacoes
+Chuvoso<-c(45.7,81.6,64,61,60.4,73.3,117,53,82.2,70.2,63.5,87.2,54.7,55.6,48.3,118.1,68.4,74.8,166.6,51.8,89,52.7,73.9,49.7,58.5,34.6,51) #Precipiacoes máximas anuais do periodo chuvoso
+Seco<-c(26.5,33.1,27.9,35.6,51.2,29.3,18.9,55.5,38.8,45.8,22.6,46.5,68.6,22.4,33.1,43.1,79.6,15,43.8,42.5,54.6,21.3,26.9,33.9,54.2,19.5,37.9) #Precipiacoes máximas anuais do periodo seco
+
+
+              #ANÁLISE DO PERÍODO CHUVOSO
+              
+y<-Chuvoso
+x<-Ano
+
+# Testes preliminares
+Box.test(y,type=("Ljung-Box"))
+runs.test(y)
+MannKendall(y)
+pettitt.test(y)
+
+# Estimativas de Máxima Verossimilhança para os parâmetros da GEV
+m3t<- fgev(y);m3t
+
+# Início da Análise Bayesiana
+# Estimação Bayesiana com priori Normal Trivariada informativa
+vmed <-c(60.52, 13.36,  -0.1);vmed # Hiperparâmetros para a média 
+mvar2<-matrix(0,3,3)
+mvar2[1,]<- c(6.2251424,  1.6568076, -0.1889574) # Hiperparâmetros para matriz de covariancia
+mvar2[2,]<- c(1.6568076,  3.4478205,-0.1603061)
+mvar2[3,]<- c(-0.1889574, -0.1603061,0.0255007)
+mvar3<-mvar2*(1/2) # Matriz de covariancia multiplicada por 1/2
+p_inf <- prior.norm(mean =vmed , cov = mvar3)  # priori Normal Trivariada 
+#Estimativas obtidas via Maxima Verossimilhanca (m3t)
+psd0<- ar.choice(init=c(58.25, 16.17, 0.15), p_inf, lh = "gev", n = 1000, psd=rep(.01, 3), data=y);psd0 
+posteI<-posterior(180000, init = c(58.97, 11.75, 0.16), prior = p_inf, lh = "gev", data =y , psd = psd0$psd,burn=30000,thin=30)
+param.mcmcI <- as.mcmc(posteI)
+summary(param.mcmcI) # Retorno das médias a posteriori dos parametros
+
+# Diagnósticos deconvergência das cadeias a posteriori
+geweke.diag(param.mcmcI)
+raftery.diag(param.mcmcI)
+heidel.diag(param.mcmcI)
+
+mu2<-mean(param.mcmcI[,1]); mu2 # Estimativa do parâmetro posição (GEV)
+sig2<-mean(param.mcmcI[,2]);sig2 # Estimativa do parâmetro escala (GEV)
+xi2<-mean(param.mcmcI[,3]);xi2 # Estimativa do parâmetro Forma(GEV)
+
+# Cálculo dos níveis de retorno, para os tempos de retorno de 5, 10, 25 e 50 anos
+k<-length(posteI[,1])
+loc <- numeric(k) 
+escala <- numeric(k) 
+forma <- numeric(k) 
+prob=c(1/5,1/10,1/25,1/50)
+np<-length(prob) 
+q1 <- numeric(k) 
+q2 <- numeric(k)
+q3 <- numeric(k) 
+q4 <- numeric(k) 
+for (i in 1:k)
+{ 
+          loc[i] <- posteI[i,1] 
+          escala[i] <- posteI[i,2] 
+          forma[i] <- posteI[i,3] 
+q1[i]<-(loc[i]+((escala[i]/forma[i])*(((-log(1-prob[1]))^ 
+(-forma[i]))-1))) 
+q2[i]<-(loc[i]+((escala[i]/forma[i])*(((-log(1-prob[2]))^ 
+(-forma[i]))-1))) 
+q3[i]<-(loc[i]+((escala[i]/forma[i])*(((-log(1-prob[3]))^ 
+(-forma[i]))-1))) 
+q4[i]<-(loc[i]+((escala[i]/forma[i])*(((-log(1-prob[4]))^ 
+(-forma[i]))-1))) 
+} 
+nit<-length(q1)  
+qo<-matrix(0,nit,4)  
+qo[,1]<-q1 
+qo[,2]<-q2 
+qo[,3]<-q3
+qo[,4]<-q4
+
+# Análise dos níveis de retorno
+nivel_ret_mcmc <- as.mcmc(qo)
+summary(nivel_ret_mcmc)
+HPDinterval(nivel_ret_mcmc)
+
+
+              #ANÁLISE DO PERÍODO Seco
+y<-Seco
+# Testes preliminares
+Box.test(y,type=("Ljung-Box"))
+runs.test(y)
+MannKendall(y)
+pettitt.test(y)
+
+# Estimativas de Máxima Verossimilhança para os parâmetros da GEV
+m3t<- fgev(y);m3t
+
+# Início da Análise Bayesiana
+# Estimação Bayesiana com priori Normal Trivariada informativa
+vmed <-c(40.1,  13.73,-0.11);vmed   # Hiperparâmetros para a média
+mvar2<-matrix(0,3,3)
+mvar2[1,]<- c(6.1316375, 1.18101054,-0.11325766) # Hiperparâmetros para matriz de covariância
+mvar2[2,]<- c(1.18101054,3.12938084,-0.09118558)
+mvar2[3,]<- c(-0.11325766,-0.09118558, 0.01398459)
+mvar3<-mvar2*1
+p_inf <- prior.norm(mean =vmed , cov = mvar3)  # priori Normal Trivariada 
+#Estimativas obtidas via Maxima Verossimilhanca (m3t)
+psd0<- ar.choice(init=c(30.93, 12.19, 0), p_inf, lh = "gev", n = 1000, psd=rep(.01, 3), data=y);psd0
+posteI<-posterior(180000, init = c(30.93, 12.19, 0), prior = p_inf, lh = "gev", data =y , psd = psd0$psd,burn=30000,thin=30)
+param.mcmcI <- as.mcmc(posteI)
+summary(param.mcmcI) # Retorno das médias a posteriori dos parametros
+
+# Diagnósticos deconvergência das cadeias a posteriori
+geweke.diag(param.mcmcI)
+raftery.diag(param.mcmcI)
+heidel.diag(param.mcmcI)
+
+mu2<-mean(param.mcmcI[,1]); mu2 # Estimativa do parâmetro posição (GEV)
+sig2<-mean(param.mcmcI[,2]);sig2 # Estimativa do parâmetro escala (GEV)
+xi2<-mean(param.mcmcI[,3]);xi2 # Estimativa do parâmetro Forma(GEV)
+
+# Cálculo dos níveis de retorno, para os tempos de retorno de 5, 10, 25 e 50 anos
+k<-length(posteI[,1])
+loc <- numeric(k) 
+escala <- numeric(k) 
+forma <- numeric(k) 
+prob=c(1/5,1/10,1/25,1/50)
+np<-length(prob) 
+q1 <- numeric(k) 
+q2 <- numeric(k)
+q3 <- numeric(k) 
+q4 <- numeric(k) 
+for (i in 1:k)
+{ 
+          loc[i] <- posteI[i,1] 
+          escala[i] <- posteI[i,2] 
+          forma[i] <- posteI[i,3] 
+q1[i]<-(loc[i]+((escala[i]/forma[i])*(((-log(1-prob[1]))^ 
+(-forma[i]))-1))) 
+q2[i]<-(loc[i]+((escala[i]/forma[i])*(((-log(1-prob[2]))^ 
+(-forma[i]))-1))) 
+q3[i]<-(loc[i]+((escala[i]/forma[i])*(((-log(1-prob[3]))^ 
+(-forma[i]))-1))) 
+q4[i]<-(loc[i]+((escala[i]/forma[i])*(((-log(1-prob[4]))^ 
+(-forma[i]))-1))) 
+} 
+nit<-length(q1)  
+qo<-matrix(0,nit,4)  
+qo[,1]<-q1 
+qo[,2]<-q2 
+qo[,3]<-q3
+qo[,4]<-q4
+
+# Análise dos níveis de retorno
+nivel_ret_mcmc <- as.mcmc(qo)
+summary(nivel_ret_mcmc)
+HPDinterval(nivel_ret_mcmc)
+
+
+
+
+
+
