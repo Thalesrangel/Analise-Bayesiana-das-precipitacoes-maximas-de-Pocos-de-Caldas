@@ -91,7 +91,7 @@ summary(nivel_ret_mcmc)
 HPDinterval(nivel_ret_mcmc)
 
 
-              #ANÁLISE DO PERÍODO Seco
+              #ANÁLISE DO PERÍODO SECO
 y<-Seco
 # Testes preliminares
 Box.test(y,type=("Ljung-Box"))
