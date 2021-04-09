@@ -10,44 +10,46 @@ library(evdbayes)
 library("coda")
 
 #Dados de precipitação de Poços de caldas:
-Ano<-c(1989,1990,1991,1992,1993,1994,1995,1996,1997,1998,1999,2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2012,2013,2014,2015) #Anos relativos ás precipitacoes
-Chuvoso<-c(45.7,81.6,64,61,60.4,73.3,117,53,82.2,70.2,63.5,87.2,54.7,55.6,48.3,118.1,68.4,74.8,166.6,51.8,89,52.7,73.9,49.7,58.5,34.6,51) #Precipiacoes máximas anuais do periodo chuvoso
-Seco<-c(26.5,33.1,27.9,35.6,51.2,29.3,18.9,55.5,38.8,45.8,22.6,46.5,68.6,22.4,33.1,43.1,79.6,15,43.8,42.5,54.6,21.3,26.9,33.9,54.2,19.5,37.9) #Precipiacoes máximas anuais do periodo seco
+Ano<-c(1989,1990,1991,1992,1993,1994,1995,1996,1997,1998,1999,2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2012,2013,2014,2015) #Anos relativos ás precipitações
+Chuvoso<-c(45.7,81.6,64,61,60.4,73.3,117,53,82.2,70.2,63.5,87.2,54.7,55.6,48.3,118.1,68.4,74.8,166.6,51.8,89,52.7,73.9,49.7,58.5,34.6,51) #Precipitações máximas anuais do periodo chuvoso
+Seco<-c(26.5,33.1,27.9,35.6,51.2,29.3,18.9,55.5,38.8,45.8,22.6,46.5,68.6,22.4,33.1,43.1,79.6,15,43.8,42.5,54.6,21.3,26.9,33.9,54.2,19.5,37.9) #Precipitações máximas anuais do periodo seco
 
 
               #ANÁLISE DO PERÍODO CHUVOSO
               
-y<-Chuvoso
+y<-Chuvoso #selecionando os dados de precipitação do período chuvoso
 x<-Ano
 
 # Testes preliminares
-Box.test(y,type=("Ljung-Box"))
-runs.test(y)
-MannKendall(y)
-pettitt.test(y)
+Box.test(y,type=("Ljung-Box")) # Teste para verificar a independência dos dados
+runs.test(y) # Teste para verificar se há indícios de não aleatoriedade na série
+MannKendall(y) # Teste para verificar se há indícios de presença de tendência na série
+pettitt.test(y) # Teste para localizar o ponto onde houve uma mudança brusca na série temporal, caso verificado indícios de presença de tendência na série
 
 # Estimativas de Máxima Verossimilhança para os parâmetros da GEV
 m3t<- fgev(y);m3t
 
 # Início da Análise Bayesiana
 # Estimação Bayesiana com priori Normal Trivariada informativa
-vmed <-c(60.52, 13.36,  -0.1);vmed # Hiperparâmetros para a média 
+vmed <-c(60.52, 13.36,  -0.1);vmed # Inserir hiperparâmetros para a média 
 mvar2<-matrix(0,3,3)
-mvar2[1,]<- c(6.2251424,  1.6568076, -0.1889574) # Hiperparâmetros para matriz de covariancia
+mvar2[1,]<- c(6.2251424,  1.6568076, -0.1889574) # Inserir hiperparâmetros para matriz de covariancia
 mvar2[2,]<- c(1.6568076,  3.4478205,-0.1603061)
 mvar2[3,]<- c(-0.1889574, -0.1603061,0.0255007)
-mvar3<-mvar2*(1/2) # Matriz de covariancia multiplicada por 1/2
+mvar3<-mvar2*(1/2) # Matriz de covariancia multiplicada por 1/2, no caso, pode-se alterar o valor, objetivando refinar as informações fornecidas a priori
 p_inf <- prior.norm(mean =vmed , cov = mvar3)  # priori Normal Trivariada 
 #Estimativas obtidas via Maxima Verossimilhanca (m3t)
 psd0<- ar.choice(init=c(58.25, 16.17, 0.15), p_inf, lh = "gev", n = 1000, psd=rep(.01, 3), data=y);psd0 
 posteI<-posterior(180000, init = c(58.97, 11.75, 0.16), prior = p_inf, lh = "gev", data =y , psd = psd0$psd,burn=30000,thin=30)
+#ccaso os diagnósticos aponte que há indícios de não convergência das cadeias a posteriori, deve-se alterar os valores do número de iterações, burn e thin
+
 param.mcmcI <- as.mcmc(posteI)
 summary(param.mcmcI) # Retorno das médias a posteriori dos parametros
 
 # Diagnósticos deconvergência das cadeias a posteriori
-geweke.diag(param.mcmcI)
-raftery.diag(param.mcmcI)
-heidel.diag(param.mcmcI)
+geweke.diag(param.mcmcI) # Verifica se não há indícios de ausência de convergência, para isso, o módulo da estatistica deve ser inferior a 1.96
+raftery.diag(param.mcmcI) # Verifica se há independência entre as iterações, para isso, o fator de dependência do teste deve ser próximo a 1
+heidel.diag(param.mcmcI)  # Verifica se a série é não estacionária, para isso, o valor-p do teste deve ser maior que 0.05
 
 mu2<-mean(param.mcmcI[,1]); mu2 # Estimativa do parâmetro posição (GEV)
 sig2<-mean(param.mcmcI[,2]);sig2 # Estimativa do parâmetro escala (GEV)
